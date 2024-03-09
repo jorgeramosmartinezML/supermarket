@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi"
 )
@@ -54,6 +55,52 @@ func getProductsWithPriceGreaterThan(products []Product, price float64) []Produc
 		}
 	}
 	return productsWithPriceGreaterThan
+}
+
+func getNextId(products []Product) int {
+	var maxId int
+	for _, product := range products {
+		if product.Id > maxId {
+			maxId = product.Id
+		}
+	}
+	return maxId + 1
+}
+
+func isProductValid(product Product) bool {
+	if product.Name == "" {
+		return false
+	}
+	if product.Quantity <= 0 {
+		return false
+	}
+	if product.CodeValue == "" {
+		return false
+	}
+	if product.Price <= 0 {
+		return false
+	}
+	if product.Expiration == "" {
+		return false
+	}
+	return true
+}
+
+func existsCodeValue(products []Product, codeValue string) bool {
+	for _, product := range products {
+		if product.CodeValue == codeValue {
+			return true
+		}
+	}
+	return false
+}
+
+func isValidDate(date string) bool {
+	_, err := time.Parse("02/01/2006", date)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func main() {
@@ -113,6 +160,34 @@ func main() {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(products)
+
+	})
+
+	router.Post("/products", func(w http.ResponseWriter, r *http.Request) {
+		var product Product
+		if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if !isProductValid(product) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if existsCodeValue(products, product.CodeValue) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if !isValidDate(product.Expiration) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		product.Id = getNextId(products)
+		products = append(products, product)
+		w.WriteHeader(http.StatusCreated)
 
 	})
 
